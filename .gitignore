@@ -1,2 +1,8 @@
 
 *.scm~
+.DS_Store
+*.dep
+*.zo
+*.dot
+*.rkt~
+test/.DS_Store
