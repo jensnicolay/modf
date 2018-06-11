@@ -6,6 +6,8 @@
 
 (random-seed 111)
 
+(provide conc-eval)
+
 (define ns (make-base-namespace))
 
 ;;;;;;;;;;
@@ -24,7 +26,7 @@
                                                    (define hash-proc (lambda (s rhash) (equal-hash-code (compiled-name s))))
                                                    (define hash2-proc (lambda (s rhash) (equal-secondary-hash-code (compiled-name s))))))
 (struct addr (a) #:transparent)
-(struct stack (ι κ) #:transparent)
+;(struct ctx (e ρ) #:transparent)
 (struct ev (e ρ ι κ) #:transparent)
 (struct ko (d ι κ) #:transparent)
 (struct system (initial graph duration) #:transparent)
@@ -45,15 +47,18 @@
           (vector-set! v 0 i)
           (vector-set! v i x)
           i))))
-;(define ctxis (make-vector 2000))
-;(define (ctx->ctxi q) (index ctxis q))
+(define stateis (make-vector 8000))
+(define (state->statei q) (index stateis q))
+(define ctxis (make-vector 2000))
+(define (ctx->ctxi q) (index ctxis q))
+
+
+
 
 ;;;
 
 (define (successors s g)
   (hash-ref g s (set)))
-
-;(printf "NO clear of visited for new address\n")
 
 (define (explore e lat alloc kalloc)
     
@@ -66,14 +71,16 @@
   (define false? (lattice-false? lat))
   (define α-eq? (lattice-eq? lat))
 
-  (define S (set))
   (define σ (hash))
   ;(define C (hash))
-  (define Ξ (hash))
-
+  (define R (hash)) ; Addr -> State* (address -> read states)
+  (define W (set))
+  
   (define Compiled (set))
 
-  (define (store-lookup a)
+  (define (store-lookup a κ)
+    ;(printf "registering read dep ~v -> ~v\n" a κ) 
+    (set! R (hash-set R a (set-add (hash-ref R a (set)) κ)))
     (hash-ref σ a))
 
   (define store-size 0)
@@ -86,35 +93,35 @@
 
   (define (store-alloc! a d)
     (if (hash-has-key? σ a) 
-        (let* ((current (hash-ref σ a))
+        (let* ((current (hash-ref σ a ⊥))
                (updated (⊔ current d)))
-          ;(set! C (hash-set C a (add1 (hash-ref C a))))
           (unless (equal? current updated)
             (set! σ (hash-set σ a updated))
             (set-store-size! (+ (- store-size (set-count current)) (set-count updated)))
+            ;(printf ".")
+            ;(printf "alloc retriggering ~v because update on a ~v: ~a -> ~a\n" (set-map (hash-ref R a (set)) ctx->ctxi) (~a a #:max-width 40) (set-count current) (set-count updated))
             ;(printf "alloc ~a -> ~a\n" (set-count current) (set-count updated))
-            (set! S (set))         
+            (set! W (set-union W (hash-ref R a (set))))
+            ;(set! W (set-union W (list->set (set-map (hash-ref R a (set)) (lambda (κ) (ev (ctx-e κ) (ctx-ρ κ) '()))))))
             ))
         (begin
-          ;(set! C (hash-set C a 1))
           (set! σ (hash-set σ a d))
           (set-store-size! (+ store-size (set-count d)))
           ;(printf "address ~a\n" (set-count (hash-keys σ)))
-          (set! S (set))
           )
         ))
           
   (define (store-update! a d)
     (let* ((current (hash-ref σ a))
-           ;(c (hash-ref C a))
-           (updated (if #f;(= c 1)
-                        d
-                        (⊔ current d))))
+           (updated (⊔ current d)))
       (unless (equal? current updated)
         (set! σ (hash-set σ a updated))
         (set-store-size! (+ (- store-size (set-count current)) (set-count updated)))
+        ;(printf "+~v >> ~v+ " a (set-count d))
+        ;(printf "+");
+        ;(printf "update retriggering ~v because update on a ~v: ~a -> ~a\n" (set-map (hash-ref R a (set)) ctx->ctxi) (~a a #:max-width 40) (set-count current) (set-count updated))
         ;(printf "update ~a -> ~a\n" (set-count current) (set-count updated))
-        (set! S (set)) 
+        (set! W (set-union W (hash-ref R a (set))))
         )))
 
   (define (alloc-literal! e)
@@ -126,19 +133,22 @@
               (α (addr a)))))
         (α e)))
 
-  (define (atom-eval e ρ)
+  (define (atom-eval e ρ κ)
     (match e
       ((«lit» _ d)
        (α d))
       ((«id» _ x)
-       (store-lookup (hash-ref ρ x)))
+       (store-lookup (hash-ref ρ x) κ))
       ((«lam» _ _ _)
        (α (clo e ρ)))
       ((«quo» _ e)
        (α e))
       (_ (error "atom expected, got" e))))
-  
+
+  (define num-steps 0)
   (define (step s)
+    (set! num-steps (add1 num-steps))
+    ;(printf "stepping ~v ~v\n" (state->statei s) s)
     (match s
       ((ev («let» _ e-id e-init e-body) ρ ι κ)
        (set (ev e-init ρ (cons (letk e-id e-body ρ) ι) κ)))
@@ -147,35 +157,42 @@
               (ρ* (hash-set ρ («id»-x e-id) a)))
          (set (ev e-init ρ* (cons (letreck a e-body ρ*) ι) κ))))
       ((ev («if» _ e-cond e-true e-false) ρ ι κ)
-       (let ((d-cond (atom-eval e-cond ρ)))
+       (let ((d-cond (atom-eval e-cond ρ κ)))
          (set-union (if (true? d-cond) (set (ev e-true ρ ι κ)) (set))
                     (if (false? d-cond) (set (ev e-false ρ ι κ)) (set)))))
       ((ev («set!» _ («id» _ x) e0) ρ ι κ)
        (let ((a (hash-ref ρ x))
-             (d (atom-eval e0 ρ)))
+             (d (atom-eval e0 ρ κ)))
          (store-update! a d)
          (set (ko d ι κ))))
       ((ev (and e-app («app» _ e-rator e-rands)) ρ ι κ)
-       (let ((d-rator (atom-eval e-rator ρ))
-             (d-rands (map (lambda (æ) (atom-eval æ ρ)) e-rands)))
+       (let ((d-rator (atom-eval e-rator ρ κ))
+             (d-rands (map (lambda (æ) (atom-eval æ ρ κ)) e-rands)))
          (for/fold ((S (set))) ((rator (in-set (γ d-rator))))
            (match rator
              ((clo («lam» _ xs e-body) ρ**)
-              (let ((d-rands (map (lambda (æ) (atom-eval æ ρ)) e-rands)))
-                (let bind-loop ((xs xs) (ρ* ρ**) (d-rands d-rands))
-                  (if (null? xs)
-                      (let ((κ* (kalloc rator d-rands ρ*)))
-                        (set! Ξ (hash-set Ξ κ* (set-add (hash-ref Ξ κ* (set)) (stack ι κ))))
-                        (set-union S (set (ev e-body ρ* '() κ*))))
-                      (if (null? d-rands)
-                          S
-                          (let* ((e-param (car xs))
-                                 (x («id»-x e-param))
-                                 (a (alloc e-param 'TODO)))
-                            (store-alloc! a (car d-rands))
-                            (bind-loop (cdr xs) (hash-set ρ* x a) (cdr d-rands))))))))
+              (let bind-loop ((xs xs) (ρ* ρ**) (d-rands d-rands))
+                (if (null? xs)
+                    (let ((κ* (kalloc rator d-rands ρ*)))
+                      (if (hash-has-key? σ κ*)
+                          (let ((d-ret (store-lookup κ* κ)))
+                            (set-add S (ko d-ret ι κ)))
+                          (begin
+                            ;(printf "adding ~v\n" (ctx->ctxi κ*))
+                            (store-alloc! κ* ⊥)
+                            (set! W (set-add W κ*))
+                            ;(printf "registering read dep ~v -> ~v\n" κ* κ) 
+                            (set! R (hash-set R κ* (set-add (hash-ref R κ* (set)) κ))) ; simulated store-lookup effect
+                            (set-add S (ko ⊥ ι κ)))))
+                    (if (null? d-rands)
+                        S
+                        (let* ((e-param (car xs))
+                               (x («id»-x e-param))
+                               (a (alloc e-param κ)))
+                          (store-alloc! a (car d-rands))
+                          (bind-loop (cdr xs) (hash-set ρ* x a) (cdr d-rands)))))))
              ((prim2 _ proc)
-              (let ((d-ret (apply proc d-rands)))
+              (let ((d-ret (apply proc κ d-rands)))
                 (set-add S (ko d-ret ι κ))))
              ((prim _ proc)
               (let ((D-ret (proc e-app κ d-rands)))
@@ -185,7 +202,7 @@
        (let ((d (alloc-literal! e-quote)))
          (set (ko d ι κ))))
       ((ev e ρ ι κ)
-       (let ((d (atom-eval e ρ)))
+       (let ((d (atom-eval e ρ κ)))
          (set (ko d ι κ))))
       ((ko d (cons (letk e-id e ρ) ι) κ)
        (let* ((a (alloc e-id κ))
@@ -195,19 +212,15 @@
       ((ko d (cons (letreck a e ρ) ι) κ)
        (store-alloc! a d)
        (set (ev e ρ ι κ)))
-      ((ko _ '() #f)
-       (set))
       ((ko d '() κ)
-       ;(let ((d* (⊔ (hash-ref M κ ⊥) d)))
-        ; (set! M (hash-set M κ d*))
-         (for/set ((st (in-set (hash-ref Ξ κ))))
-           (ko d (stack-ι st) (stack-κ st))))
-      ;)
+       (store-update! κ d)
+       (set))
       ))
 
   (define g (hash))
   
   (define (add-transitions! from tos)
+    ;(printf "~a -> ~a\n" (state->statei from) (set-map tos state->statei))
     (set! g (hash-set g from (set-union (hash-ref g from (set)) tos))))
 
   (define (inject! e)
@@ -227,10 +240,10 @@
                                 (lambda ()
                                   (let ((e-lam (compile e)))
                                     (define-prims! (free e-lam))
-                                    (let ((clo-prim (atom-eval e-lam ρ0)))
-                                      (set! Compiled (set-add Compiled clo-prim))
+                                    (let ((clo-prim (atom-eval e-lam ρ0 'fake-κ)))
+                                      (set! Compiled (set-union Compiled (γ clo-prim)))
                                       (store-alloc! name clo-prim)))))))                                            
-
+                              
     ;(define-native-prim! "apply"
     ;  (lambda (e-app κ d-rands)
     ;    (
@@ -258,28 +271,28 @@
     (define-native-prim! "car"
       (lambda (_ κ d-rands)
         (set (for/fold ((d ⊥)) ((a (in-set (γ (car d-rands)))) #:when (addr? a))
-               (for/fold ((d d)) ((w (in-set (γ (store-lookup (addr-a a))))) #:when (pair? w))
+               (for/fold ((d d)) ((w (in-set (γ (store-lookup (addr-a a) κ)))) #:when (pair? w))
                  (⊔ d (car w)))))))
 
     (define-native-prim! "set-car!"
       (lambda (_ κ d-rands)
         (let ((d (cadr d-rands)))
           (for ((a (in-set (γ (car d-rands)))) #:when (addr? a))
-            (for ((w (in-set (γ (store-lookup (addr-a a))))) #:when (pair? w))
+            (for ((w (in-set (γ (store-lookup (addr-a a) κ)))) #:when (pair? w))
               (store-update! (addr-a a) (α (cons d (cdr w))))))
           (set (α 'undefined)))))
 
     (define-native-prim! "cdr"
       (lambda (_ κ d-rands)
         (set (for/fold ((d ⊥)) ((a (in-set (γ (car d-rands)))) #:when (addr? a))
-               (for/fold ((d d)) ((w (in-set (γ (store-lookup (addr-a a))))) #:when (pair? w))
+               (for/fold ((d d)) ((w (in-set (γ (store-lookup (addr-a a) κ)))) #:when (pair? w))
                  (⊔ d (cdr w)))))))
     
     (define-native-prim! "set-cdr!"
       (lambda (_ κ d-rands)
         (let ((d (cadr d-rands)))
           (for ((a (in-set (γ (car d-rands)))) #:when (addr? a))
-            (for ((w (in-set (γ (store-lookup (addr-a a))))) #:when (pair? w))
+            (for ((w (in-set (γ (store-lookup (addr-a a) κ)))) #:when (pair? w))
               (store-update! (addr-a a) (α (cons (car w) d)))))
           (set (α 'undefined)))))
 
@@ -288,7 +301,7 @@
         (let ((d (for/fold ((d ⊥)) ((w (in-set (γ (car d-rands)))))
                    (match w
                      ((addr a)
-                      (for/fold ((d d)) ((ww (in-set (γ (store-lookup a)))))
+                      (for/fold ((d d)) ((ww (in-set (γ (store-lookup a κ)))))
                         (⊔ d (α (pair? ww)))))
                      (_
                       (⊔ d (α #f)))))))
@@ -298,9 +311,10 @@
       (lambda (_ κ d-rands)
         (let* ((a (alloc e κ))
                (num (car d-rands))
+               ;(global (lattice-global lattice))
                (lt-proc (lambda (x y)
                           (for/fold ((result ⊥)) ((prim2 (γ (cdr (assoc "<" lat-glob)))))
-                            (⊔ result ((prim2-proc prim2) x y))))) ; TODO check whether we can use conc +1 and then α
+                            (⊔ result ((prim2-proc prim2) x y)))))
                (add-proc (lambda (x y)
                            (for/fold ((result ⊥)) ((prim2 (γ (cdr (assoc "+" lat-glob)))))
                              (⊔ result ((prim2-proc prim2) x y)))))
@@ -331,7 +345,7 @@
           (let ((v (for/fold ((v ⊥)) ((w (γ (car d-rands))))
                      (match w
                        ((addr a)
-                        (for/fold ((v v)) ((ww (γ (store-lookup a))))
+                        (for/fold ((v v)) ((ww (γ (store-lookup a κ))))
                           (if (hash? ww)
                               (for/fold ((v v)) (((key val) ww))
                                 (if (or (⊑ index key) (⊑ key index) )
@@ -348,7 +362,7 @@
               (v3 (caddr d-rands)))
           (for ((w (in-set (γ v1))) #:when (addr? w))
             (let ((a (addr-a w)))
-              (for ((ww (in-set (γ (store-lookup a)))))
+              (for ((ww (in-set (γ (store-lookup a κ)))))
                 (when (hash? ww)
                   (store-update! a (α (hash-set ww v2 v3)))))))
           (set (α 'undefined)))))
@@ -365,7 +379,7 @@
               (let ((v (for/fold ((v ⊥)) ((w (in-set (γ (car d-rands)))))
                          (match w
                            ((addr a)
-                            (for/fold ((v v)) ((ww (γ (store-lookup a))))
+                            (for/fold ((v v)) ((ww (γ (store-lookup a κ))))
                               (if (hash? ww)
                                   (⊔ v (for/fold ((n (α 0))) ((i (in-set (hash-keys ww))))
                                          (let ((ii (add-proc i (α 1))))
@@ -377,7 +391,6 @@
                 (set v)))
             (set))))
 
-        
     (define-native-prim! "eq?"
       (lambda (_ __ d-rands)
         (set (for*/fold ((d ⊥)) ((w1 (γ (car d-rands))) (w2 (γ (cadr d-rands))))
@@ -400,17 +413,16 @@
                       ((_ _)
                        (α-eq? w1 w2))))))))
 
-    
     (define-native-prim! "error"
       (lambda _ (set)))
-    
+
     (define-native-prim! "display"
       (lambda (_ __ d-rands)
         (printf "~v\n" d-rands)
         (set (α 'undefined))))
 
     (include "primitives.rkt")
-                                  
+        
     (define (define-prims! W-free)
       (unless (set-empty? W-free)
         (let ((x (set-first W-free)))
@@ -426,20 +438,25 @@
           (define-prims! (set-rest W-free)))))
 
     (define-prims! (free e))
-    (ev e ρ0 '() #f))
-  
-  (define (explore! W)
+    (ev e ρ0 '() (cons e ρ0)))
+
+  (define (inter-explore!)
     (unless (set-empty? W)
-      (let ((s (set-first W)))
-        (if (set-member? S s)
-            (explore! (set-rest W))
-            (let* ((succs (step s))
-                   (W* (set-union (set-rest W) succs))
-                   (S* (set-add S s)))
-              ;(printf "TRANS ~v -> ~v\n" (state->statei s) (set-map succs state->statei)))
-              (add-transitions! s succs)
-              (set! S S*)
-              (explore! W*))))))
+      (let ((κ (set-first W)))
+        ;(printf "~v ~v\n" (set-count W) (ctx->ctxi κ))
+        (set! W (set-rest W))
+        (intra-explore! (set (ev (car κ) (cdr κ) '() κ)))
+        (inter-explore!))))
+               
+  (define (intra-explore! W-intra)
+    ;(printf "intra ω ~v\n" (state->statei ω))
+    (unless (set-empty? W-intra)
+      (let ((s (set-first W-intra)))
+        (let* ((succs (step s))
+               (W-intra* (set-union (set-rest W-intra) succs)))
+              ;(printf "TRANS ~v -> ~v\n" (state->statei s) (set-map succs state->statei))
+          (add-transitions! s succs)
+          (intra-explore! W-intra*)))))
 
 ;  (define (prune s0 g pred?)
 ;
@@ -467,18 +484,21 @@
       ((ev _ _ _ (cons rator _)) (set-member? Compiled rator))
       ((ko _ _ (cons rator _)) (set-member? Compiled rator))
       (_ #f)))
-
+  
   (let ((t-start (current-milliseconds)))
-    (let ((s0 (inject! e)))
-      (explore! (set s0))
+    (let* ((s0 (inject! e))
+           (κ (cons (ev-e s0) (ev-ρ s0))))
+      (store-alloc! κ ⊥)
+      (set! W (set κ)) ; TODO
+      (inter-explore!)
       (let ((t-end (current-milliseconds)))
         (let ((duration (- t-end t-start)))
           ;(printf "exploration ~v ms\n" duration)
           (system s0 g duration))))))
 
-(define (result-state? s)
+(define (result-state? s κ0)
   (match s
-    ((ko d '() #f)
+    ((ko d '() (== κ0))     
      #t)
     (_
      #f)))
@@ -497,24 +517,22 @@
 ;                    (loop S* (set-union (set-rest W) S-succ) (set-add S-res s))
 ;                    (loop S* (set-union (set-rest W) S-succ) S-res))))))))
 
+
 (define (evaluate e lat alloc kalloc)
   (let* ((sys (explore e lat alloc kalloc))
          (g (system-graph sys))
          (s0 (system-initial sys))
-         (states (apply set-union (cons (list->set (hash-keys g)) (hash-values g))))
-         (state-count (set-count states))
-         (d-result (for/fold ((d (lattice-⊥ lat))) ((s (in-set states)) #:when (result-state? s))
-                     ((lattice-⊔ lat) d (ko-d s)))))
-    (printf "~v states in ~v ms\n" state-count (system-duration sys))
-    (if (> state-count 10000)
-        (printf "too many states: no graph generated\n")
-        (generate-dot s0 g "grapho" (set-count states)))
-    d-result))
+         (κ0 (ev-κ s0))
+         (states (apply set-union (cons (list->set (hash-keys g)) (hash-values g)))))
+    (printf "~v states in ~v ms (~a)\n" (set-count states) (system-duration sys) (state-repr s0))
+    (generate-dot s0 g "grapho")
+    (for/fold ((d (lattice-⊥ lat))) ((s (in-set states)) #:when (result-state? s κ0))
+      ((lattice-⊔ lat) d (ko-d s)))))
     
 (define (conc-alloc e κ)
   (count!))
 
-(define (conc-kalloc rator rands ρ*)
+(define (conc-kalloc rator rands)
   (cons rator (count!)))
                      
 (define (conc-eval e)
@@ -532,61 +550,55 @@
 (define (type-eval e)
   (evaluate e type-lattice type-alloc modf-kalloc)) ; !!! MODF
 
+(define (state-repr s)
+  (match s
+    ((ev e _ _ κ) (format "(ev ~a ~v)" (~a e #:max-width 40) (ctx->ctxi κ)))
+    ((ko d _ κ) (format "(ko ~a ~v)" (~a d #:max-width 40) (ctx->ctxi κ)))))
 
-(define (generate-dot s0 g name size)
-  (define stateis (make-vector (add1 size)))
-  (define (state->statei q) (index stateis q))
-  (define ctxis (make-vector 2000))
-  (define (ctx->ctxi q) (index ctxis q))
-
-  (define (state-repr s)
-    (match s
-      ((ev e _ _ κ) (format "(ev ~a ~v)" (~a e #:max-width 40) (ctx->ctxi κ)))
-      ((ko d _ κ) (format "(ko ~a ~v)" (~a d #:max-width 40) (ctx->ctxi κ)))))
-
-
+(define (generate-dot s0 g name)
+  ;    (match from ; TODO investigate non-result end states
+;      ((ev e _ ι κ)
+;       'ok)
+;      ((ko d ι κ)
+;       (printf "??? ~a\n~a\n\n" ι κ)))
   (let ((dotf (open-output-file (format "~a.dot" name) #:exists 'replace)))
     (fprintf dotf "digraph G {\n")
-    (let loop ((S (set)) (W (set s0)))
-      (if (set-empty? W)
-          (begin
-            (fprintf dotf "}")
-            (close-output-port dotf))
-          (let ((s (set-first W)))
-            (if (set-member? S s)
-                (loop S (set-rest W))
-                (let ((S* (set-add S s))
-                      (S-succ (hash-ref g s (set)))
-                      (si (state->statei s)))
-                  (fprintf dotf "~a [label=\"~a | ~a\"];\n" si si (state-repr s))
-                  (for ((s* S-succ))
-                    (let ((si* (state->statei s*)))
-                      (fprintf dotf "~a -> ~a;\n" si si*)))
-                  (loop S* (set-union (set-rest W) S-succ)))))))))
-
+    (for (((s S-succ) (in-hash g)))
+      (let ((si (state->statei s)))
+        ;(printf "output ~a\n" si)
+        (fprintf dotf "~a [label=\"~a | ~a\"];\n" si si (state-repr s))
+        (for ((s* S-succ))
+          (let ((si* (state->statei s*)))
+            (fprintf dotf "~a -> ~a;\n" si si*)))))
+    (fprintf dotf "}")
+    (close-output-port dotf)))
+  
 ;;; TESTS
 
 (type-eval
  (compile
+
   (file->value "test/boyer.scm")
-))
+
+  )) 
 
 
 (define (benchmark names)
-  (printf "aac\n")
+  (printf "modf\n")
   (for ((name (in-list names)))
     (let* ((e (compile (file->value (string-append "test/" name ".scm"))))
            (sys (explore e type-lattice type-alloc modf-kalloc))
            (g (system-graph sys))
            (s0 (system-initial sys))
+           (κ0 (ev-κ s0))
            (states (apply set-union (cons (list->set (hash-keys g)) (hash-values g))))
            (state-count (set-count states))
-           (d-result (for/fold ((d (lattice-⊥ type-lattice))) ((s (in-set states)) #:when (result-state? s))
-                     ((lattice-⊔ type-lattice) d (ko-d s)))))
+           (d-result (for/fold ((d (lattice-⊥ type-lattice))) ((s (in-set states)) #:when (result-state? s κ0))
+                       ((lattice-⊔ type-lattice) d (ko-d s)))))
       (printf "~a ~a ~a ~a\n" (~a name #:min-width 12) (~a state-count #:min-width 12) (~a (system-duration sys) #:min-width 12) (~a (set-count ((lattice-γ type-lattice) d-result)) #:min-width 4)))))
 
 ;(benchmark (list ;"takr" "7.14" "triangl" "5.14.3"; unverified
-;            "fib" ;  warmup
+;            "fib" ; warmup
 ;            "collatz" ; warmup
 ;            "5.14.3"
 ;            "7.14"
@@ -610,5 +622,4 @@
 ;            "triangl"
 ;            "boyer"
 ;            ))
-
 

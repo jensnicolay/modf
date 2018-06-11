@@ -1,0 +1,105 @@
+;;; The Computer Language Benchmarks Game
+;;; http://shootout.alioth.debian.org/
+;;;
+;;; contributed by Anthony Borla
+(let ((A (lambda (_i15 _j16)
+           (let ((_p57 (+ _i15 _j16)))
+             (let ((_p58 (+ _i15 _j16)))
+               (let ((_p59 (+ _p58 1)))
+                 (let ((_p60 (* _p57 _p59)))
+                   (let ((_p61 (/ _p60 2)))
+                     (let ((_p62 (+ _p61 _i15)))
+                       (let ((_p63 (+ _p62 1)))
+                         (let ((_p64 (exact->inexact _p63)))
+                           (/ 1.0 _p64))))))))))))
+  (let ((mulAtV (lambda (_n24 _v25 _atv26)
+                  (letrec ((__loop427 (lambda (_i28)
+                                        (let ((_p79 (= _n24 _i28)))
+                                          (if _p79
+                                              '<undefined>
+                                              (let ((_$80 (vector-set! _atv26 _i28 0.0)))
+                                                (letrec ((__loop529 (lambda (_j30)
+                                                                      (let ((_p81 (= _n24 _j30)))
+                                                                        (if _p81
+                                                                            '<undefined>
+                                                                            (let ((_p82 (vector-ref _atv26 _i28)))
+                                                                              (let ((_p83 (A _j30 _i28)))
+                                                                                (let ((_p84 (vector-ref _v25 _j30)))
+                                                                                  (let ((_p85 (* _p83 _p84)))
+                                                                                    (let ((_p86 (+ _p82 _p85)))
+                                                                                      (let ((_$87 (vector-set! _atv26 _i28 _p86)))
+                                                                                        (let ((_p88 (+ _j30 1)))
+                                                                                          (__loop529 _p88)))))))))))))
+                                                  (let ((_$89 (__loop529 0)))
+                                                    (let ((_p90 (+ _i28 1)))
+                                                      (__loop427 _p90))))))))))
+                    (__loop427 0)))))
+    (let ((mulAv (lambda (_n17 _v18 _av19)
+                   (letrec ((__loop220 (lambda (_i21)
+                                         (let ((_p66 (= _n17 _i21)))
+                                           (if _p66
+                                               '<undefined>
+                                               (let ((_$67 (vector-set! _av19 _i21 0.0)))
+                                                 (letrec ((__loop322 (lambda (_j23)
+                                                                       (let ((_p68 (= _n17 _j23)))
+                                                                         (if _p68
+                                                                             '<undefined>
+                                                                             (let ((_p69 (vector-ref _av19 _i21)))
+                                                                               (let ((_p70 (A _i21 _j23)))
+                                                                                 (let ((_p71 (vector-ref _v18 _j23)))
+                                                                                   (let ((_p72 (* _p70 _p71)))
+                                                                                     (let ((_p73 (+ _p69 _p72)))
+                                                                                       (let ((_$74 (vector-set! _av19 _i21 _p73)))
+                                                                                         (let ((_p75 (+ _j23 1)))
+                                                                                           (__loop322 _p75)))))))))))))
+                                                   (let ((_$76 (__loop322 0)))
+                                                     (let ((_p77 (+ _i21 1)))
+                                                       (__loop220 _p77))))))))))
+                     (__loop220 0)))))
+      (let ((mulAtAv (lambda (_n31 _v32 _atav33)
+                       (let ((_u34 (make-vector _n31 0.0)))
+                         (let ((_$92 (mulAv _n31 _v32 _u34)))
+                           (mulAtV _n31 _u34 _atav33))))))
+        (let ((approximate (lambda (_n6)
+                             (let ((_u7 (make-vector _n6 1.0)))
+                               (let ((_v8 (make-vector _n6 0.0)))
+                                 (let ((_vBv9 0.0))
+                                   (let ((_vV10 0.0))
+                                     (letrec ((__loop011 (lambda (_i12)
+                                                           (let ((_p37 (= 10 _i12)))
+                                                             (if _p37
+                                                                 '<undefined>
+                                                                 (let ((_$38 (mulAtAv _n6 _u7 _v8)))
+                                                                   (let ((_$39 (mulAtAv _n6 _v8 _u7)))
+                                                                     (let ((_p40 (+ _i12 1)))
+                                                                       (__loop011 _p40)))))))))
+                                       (let ((_$41 (__loop011 0)))
+                                         (letrec ((__loop113 (lambda (_i14)
+                                                               (let ((_p42 (= _n6 _i14)))
+                                                                 (if _p42
+                                                                     '<undefined>
+                                                                     (let ((_p43 (vector-ref _u7 _i14)))
+                                                                       (let ((_p44 (vector-ref _v8 _i14)))
+                                                                         (let ((_p45 (* _p43 _p44)))
+                                                                           (let ((_p46 (+ _vBv9 _p45)))
+                                                                             (let ((_$47 (set! _vBv9 _p46)))
+                                                                               (let ((_p48 (vector-ref _v8 _i14)))
+                                                                                 (let ((_p49 (vector-ref _v8 _i14)))
+                                                                                   (let ((_p50 (* _p48 _p49)))
+                                                                                     (let ((_p51 (+ _vV10 _p50)))
+                                                                                       (let ((_$52 (set! _vV10 _p51)))
+                                                                                         (let ((_p53 (+ _i14 1)))
+                                                                                           (__loop113 _p53)))))))))))))))))
+                                           (let ((_$54 (__loop113 0)))
+                                             (let ((_p55 (/ _vBv9 _vV10)))
+                                               (sqrt _p55)))))))))))))
+          (let ((main (lambda (_args35)
+                        (let ((_p94 (null? _args35)))
+                          (let ((_n36 (if _p94
+                                          2
+                                          (let ((_p95 (car _args35)))
+                                            (string->number _p95)))))
+                            (approximate _n36))))))
+            (main '())))))))
+
+; 1.2742199912349306

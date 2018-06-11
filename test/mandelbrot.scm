@@ -1,0 +1,82 @@
+;;; The Computer Language Benchmarks Game
+;;; http://shootout.alioth.debian.org/
+;;;
+;;; contributed by Anthony Borla
+
+(let ((+limit-sqr+ 4.0))
+  (let ((add1 (lambda (_x0) (+ _x0 1))))
+    (let ((+iterations+ 50))
+      (let ((mandelbrot (lambda (_iterations1 _x2 _y3 _n4)
+                          (let ((_p24 (* 2.0 _x2)))
+                            (let ((_p25 (/ _p24 _n4)))
+                              (let ((_cr5 (- _p25 1.5)))
+                                (let ((_p26 (* 2.0 _y3)))
+                                  (let ((_p27 (/ _p26 _n4)))
+                                    (let ((_ci6 (- _p27 1.0)))
+                                      (letrec ((_loop7 (lambda (_i8 _zr9 _zi10)
+                                                         (let ((_zrq11 (* _zr9 _zr9)))
+                                                           (let ((_ziq12 (* _zi10 _zi10)))
+                                                             (let ((_p28 (> _i8 _iterations1)))
+                                                               (if _p28
+                                                                   1
+                                                                   (let ((_p29 (+ _zrq11 _ziq12)))
+                                                                     (let ((_p30 (> _p29 +limit-sqr+)))
+                                                                       (if _p30
+                                                                           0
+                                                                           (let ((_p31 (add1 _i8)))
+                                                                             (let ((_p32 (- _zrq11 _ziq12)))
+                                                                               (let ((_p33 (+ _p32 _cr5)))
+                                                                                 (let ((_p34 (* 2.0 _zr9 _zi10)))
+                                                                                   (let ((_p35 (+ _p34 _ci6)))
+                                                                                     (_loop7 _p31 _p33 _p35))))))))))))))))
+                                        (_loop7 0 0.0 0.0)))))))))))
+        (let ((main (lambda (_args13)
+                                   (let ((_p37 (null? _args13)))
+                                     (let ((_n14 (if _p37
+                                                     1
+                                                     (let ((_p38 (car _args13)))
+                                                       (string->number _p38)))))
+                                       (let ((_bitnum15 0))
+                                         (let ((_byteacc16 0))
+                                           (let ((_p39 (number->string _n14)))
+                                             (let ((_p40 (number->string _n14)))
+                                               (let ((_p41 (string-append "P4n" _p39 " " _p40)))
+                                                   (letrec ((_loop-y17 (lambda (_y18)
+                                                                         (let ((_p43 (- _n14 1)))
+                                                                           (let ((_p44 (> _y18 _p43)))
+                                                                             (if _p44
+                                                                                 '()
+                                                                                 (letrec ((_loop-x19 (lambda (_x20)
+                                                                                                       (let ((_p45 (- _n14 1)))
+                                                                                                         (let ((_p46 (> _x20 _p45)))
+                                                                                                           (if _p46
+                                                                                                               '()
+                                                                                                               (let ((_p47 (add1 _bitnum15)))
+                                                                                                                 (let ((_$48 (set! _bitnum15 _p47)))
+                                                                                                                   (let ((_p49 (* 2 _byteacc16)))
+                                                                                                                     (let ((_p50 (mandelbrot +iterations+ _x20 _y18 _n14)))
+                                                                                                                       (let ((_p51 (+ _p49 _p50)))
+                                                                                                                         (let ((_$52 (set! _byteacc16 _p51)))
+                                                                                                                           (let ((_p53 (= _bitnum15 8)))
+                                                                                                                             (let ((_$66 (if _p53
+                                                                                                                                             (let ((_p54 (integer->char _byteacc16)))
+                                                                                                                                                 (let ((_$56 (set! _bitnum15 0)))
+                                                                                                                                                   (set! _byteacc16 0)))
+                                                                                                                                             (let ((_p57 (- _n14 1)))
+                                                                                                                                               (let ((_p58 (= _x20 _p57)))
+                                                                                                                                                 (if _p58
+                                                                                                                                                     (let ((_p59 (modulo _n14 8)))
+                                                                                                                                                       (let ((_p60 (- 8 _p59)))
+                                                                                                                                                         (let ((_p61 (expt 2 _p60)))
+                                                                                                                                                           (let ((_p62 (* _byteacc16 _p61)))
+                                                                                                                                                             (let ((_p63 (integer->char _p62)))
+                                                                                                                                                                 (let ((_$65 (set! _bitnum15 0)))
+                                                                                                                                                                   (set! _byteacc16 0)))))))
+                                                                                                                                                     '<undefined>))))))
+                                                                                                                               (let ((_p67 (add1 _x20)))
+                                                                                                                                 (_loop-x19 _p67))))))))))))))))
+                                                                                   (let ((_$68 (_loop-x19 0)))
+                                                                                     (let ((_p69 (add1 _y18)))
+                                                                                       (_loop-y17 _p69))))))))))
+                                                     (_loop-y17 0))))))))))))
+            (main '()))))))
