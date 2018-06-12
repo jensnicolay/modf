@@ -52,7 +52,31 @@
 (define ctxis (make-vector 2000))
 (define (ctx->ctxi q) (index ctxis q))
 
+  (define (WL)
+    (cons (set) '()))
 
+  (define (WL-add WL el)
+    (let ((s (car WL)))
+      (if (set-member? s el)
+          WL
+          (cons (set-add s el) (cons el (cdr WL))))))
+
+  (define (WL-first WL)
+    (let ((l (cdr WL)))
+      (car l)))
+
+  (define (WL-rest WL)
+    (let ((s (car WL))
+          (l (cdr WL)))
+      (let ((el (car l)))
+        (cons (set-remove s el) (cdr l)))))
+
+  (define (WL-empty? WL)
+    (null? (cdr WL)))
+
+(define (WL-union WL s2)
+  (for/fold ((WL WL)) ((el (in-set s2)))
+    (WL-add WL el)))
 
 
 ;;;
@@ -74,7 +98,7 @@
   (define σ (hash))
   ;(define C (hash))
   (define R (hash)) ; Addr -> State* (address -> read states)
-  (define W (set))
+  (define W (WL))
   
   (define Compiled (set))
 
@@ -101,7 +125,7 @@
             ;(printf ".")
             ;(printf "alloc retriggering ~v because update on a ~v: ~a -> ~a\n" (set-map (hash-ref R a (set)) ctx->ctxi) (~a a #:max-width 40) (set-count current) (set-count updated))
             ;(printf "alloc ~a -> ~a\n" (set-count current) (set-count updated))
-            (set! W (set-union W (hash-ref R a (set))))
+            (set! W (WL-union W (hash-ref R a (set))))
             ;(set! W (set-union W (list->set (set-map (hash-ref R a (set)) (lambda (κ) (ev (ctx-e κ) (ctx-ρ κ) '()))))))
             ))
         (begin
@@ -121,7 +145,7 @@
         ;(printf "+");
         ;(printf "update retriggering ~v because update on a ~v: ~a -> ~a\n" (set-map (hash-ref R a (set)) ctx->ctxi) (~a a #:max-width 40) (set-count current) (set-count updated))
         ;(printf "update ~a -> ~a\n" (set-count current) (set-count updated))
-        (set! W (set-union W (hash-ref R a (set))))
+        (set! W (WL-union W (hash-ref R a (set))))
         )))
 
   (define (alloc-literal! e)
@@ -180,7 +204,7 @@
                           (begin
                             ;(printf "adding ~v\n" (ctx->ctxi κ*))
                             (store-alloc! κ* ⊥)
-                            (set! W (set-add W κ*))
+                            (set! W (WL-add W κ*))
                             ;(printf "registering read dep ~v -> ~v\n" κ* κ) 
                             (set! R (hash-set R κ* (set-add (hash-ref R κ* (set)) κ))) ; simulated store-lookup effect
                             (set-add S (ko ⊥ ι κ)))))
@@ -440,11 +464,12 @@
     (define-prims! (free e))
     (ev e ρ0 '() (cons e ρ0)))
 
+
   (define (inter-explore!)
-    (unless (set-empty? W)
-      (let ((κ (set-first W)))
+    (unless (WL-empty? W)
+      (let ((κ (WL-first W)))
         ;(printf "~v ~v\n" (set-count W) (ctx->ctxi κ))
-        (set! W (set-rest W))
+        (set! W (WL-rest W))
         (intra-explore! (set (ev (car κ) (cdr κ) '() κ)))
         (inter-explore!))))
                
@@ -489,7 +514,7 @@
     (let* ((s0 (inject! e))
            (κ (cons (ev-e s0) (ev-ρ s0))))
       (store-alloc! κ ⊥)
-      (set! W (set κ)) ; TODO
+      (set! W (WL-add W κ)) ; TODO
       (inter-explore!)
       (let ((t-end (current-milliseconds)))
         (let ((duration (- t-end t-start)))
