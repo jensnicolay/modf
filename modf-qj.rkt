@@ -52,26 +52,26 @@
 (define ctxis (make-vector 2000))
 (define (ctx->ctxi q) (index ctxis q))
 
-  (define (WL)
-    (cons (set) '()))
+(define (WL)
+  (cons (set) '()))
 
-  (define (WL-add WL el)
-    (let ((s (car WL)))
-      (if (set-member? s el)
-          WL
-          (cons (set-add s el) (cons el (cdr WL))))))
+(define (WL-add WL el)
+  (let ((s (car WL)))
+    (if (set-member? s el)
+        WL
+        (cons (set-add s el) (cons el (cdr WL))))))
 
-  (define (WL-first WL)
-    (let ((l (cdr WL)))
-      (car l)))
+(define (WL-first WL)
+  (let ((l (cdr WL)))
+    (car l)))
 
-  (define (WL-rest WL)
-    (let ((s (car WL))
-          (l (cdr WL)))
-      (let ((el (car l)))
-        (cons (set-remove s el) (cdr l)))))
+(define (WL-rest WL)
+  (let ((s (car WL))
+        (l (cdr WL)))
+    (let ((el (car l)))
+      (cons (set-remove s el) (cdr l)))))
 
-  (define (WL-empty? WL)
+(define (WL-empty? WL)
     (null? (cdr WL)))
 
 (define (WL-union WL s2)
@@ -107,13 +107,13 @@
     (set! R (hash-set R a (set-add (hash-ref R a (set)) κ)))
     (hash-ref σ a))
 
-  (define store-size 0)
-  (define prev-store-size 0)
-  (define (set-store-size! new)
-    (unless (= new prev-store-size)
-      (set! prev-store-size store-size)
-      (set! store-size new)
-      (printf "store-size ~v\n" new)))
+  ;(define store-size 0)
+  ;(define prev-store-size 0)
+  ;(define (set-store-size! new)
+  ;  (unless (= new prev-store-size)
+  ;    (set! prev-store-size store-size)
+  ;    (set! store-size new)
+   ;   (printf "store-size ~v\n" new)))
 
   (define (store-alloc! a d)
     (if (hash-has-key? σ a) 
@@ -121,7 +121,7 @@
                (updated (⊔ current d)))
           (unless (equal? current updated)
             (set! σ (hash-set σ a updated))
-            (set-store-size! (+ (- store-size (set-count current)) (set-count updated)))
+            ;(set-store-size! (+ (- store-size (set-count current)) (set-count updated)))
             ;(printf ".")
             ;(printf "alloc retriggering ~v because update on a ~v: ~a -> ~a\n" (set-map (hash-ref R a (set)) ctx->ctxi) (~a a #:max-width 40) (set-count current) (set-count updated))
             ;(printf "alloc ~a -> ~a\n" (set-count current) (set-count updated))
@@ -130,7 +130,7 @@
             ))
         (begin
           (set! σ (hash-set σ a d))
-          (set-store-size! (+ store-size (set-count d)))
+          ;(set-store-size! (+ store-size (set-count d)))
           ;(printf "address ~a\n" (set-count (hash-keys σ)))
           )
         ))
@@ -140,7 +140,7 @@
            (updated (⊔ current d)))
       (unless (equal? current updated)
         (set! σ (hash-set σ a updated))
-        (set-store-size! (+ (- store-size (set-count current)) (set-count updated)))
+        ;(set-store-size! (+ (- store-size (set-count current)) (set-count updated)))
         ;(printf "+~v >> ~v+ " a (set-count d))
         ;(printf "+");
         ;(printf "update retriggering ~v because update on a ~v: ~a -> ~a\n" (set-map (hash-ref R a (set)) ctx->ctxi) (~a a #:max-width 40) (set-count current) (set-count updated))
@@ -600,12 +600,12 @@
   
 ;;; TESTS
 
-(type-eval
- (compile
-
-  (file->value "test/boyer.scm")
-
-  )) 
+;(type-eval
+; (compile
+;
+;  (file->value "test/boyer.scm")
+;
+;  )) 
 
 
 (define (benchmark names)
@@ -622,29 +622,29 @@
                        ((lattice-⊔ type-lattice) d (ko-d s)))))
       (printf "~a ~a ~a ~a\n" (~a name #:min-width 12) (~a state-count #:min-width 12) (~a (system-duration sys) #:min-width 12) (~a (set-count ((lattice-γ type-lattice) d-result)) #:min-width 4)))))
 
-;(benchmark (list ;"takr" "7.14" "triangl" "5.14.3"; unverified
-;            "fib" ; warmup
-;            "collatz" ; warmup
-;            "5.14.3"
-;            "7.14"
-;            "browse"
-;            "churchnums"
-;            "dderiv"
-;            "deriv"
-;            "destruct"
-;            "fannkuch"
-;            "graphs"
-;            "grid"
-;            ;"matrix" no results in machine
-;            "mazefun"
-;            "mceval"
-;            "partialsums"
-;            "primtest"
-;            "regex"
-;            "scm2java"
-;            "spectralnorm"
-;            "treeadd"
-;            "triangl"
-;            "boyer"
-;            ))
+(benchmark (list ;"takr" "7.14" "triangl" "5.14.3"; unverified
+            "fib" ; warmup
+            "collatz" ; warmup
+            "5.14.3"
+            "7.14"
+            "browse"
+            "churchnums"
+            "dderiv"
+            "deriv"
+            "destruct"
+            "fannkuch"
+            "graphs"
+            "grid"
+            ;"matrix" no results in machine
+            "mazefun"
+            "mceval"
+            "partialsums"
+            "primtest"
+            "regex"
+            "scm2java"
+            "spectralnorm"
+            "treeadd"
+            "triangl"
+            "boyer"
+            ))
 

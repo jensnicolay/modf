@@ -76,13 +76,13 @@
   (define (store-lookup a)
     (hash-ref σ a))
 
-  (define store-size 0)
-  (define prev-store-size 0)
-  (define (set-store-size! new)
-    (unless (= new prev-store-size)
-      (set! prev-store-size store-size)
-      (set! store-size new)
-      (printf "store-size ~v\n" new)))
+  ;(define store-size 0)
+  ;(define prev-store-size 0)
+  ;(define (set-store-size! new)
+  ;  (unless (= new prev-store-size)
+  ;    (set! prev-store-size store-size)
+  ;    (set! store-size new)
+  ;    (printf "store-size ~v\n" new)))
 
   (define (store-alloc! a d)
     (if (hash-has-key? σ a) 
@@ -91,14 +91,14 @@
           ;(set! C (hash-set C a (add1 (hash-ref C a))))
           (unless (equal? current updated)
             (set! σ (hash-set σ a updated))
-            (set-store-size! (+ (- store-size (set-count current)) (set-count updated)))
+   ;         (set-store-size! (+ (- store-size (set-count current)) (set-count updated)))
             ;(printf "alloc ~a -> ~a\n" (set-count current) (set-count updated))
             (set! S (set))         
             ))
         (begin
           ;(set! C (hash-set C a 1))
           (set! σ (hash-set σ a d))
-          (set-store-size! (+ store-size (set-count d)))
+    ;      (set-store-size! (+ store-size (set-count d)))
           ;(printf "address ~a\n" (set-count (hash-keys σ)))
           (set! S (set))
           )
@@ -112,7 +112,7 @@
                         (⊔ current d))))
       (unless (equal? current updated)
         (set! σ (hash-set σ a updated))
-        (set-store-size! (+ (- store-size (set-count current)) (set-count updated)))
+     ;   (set-store-size! (+ (- store-size (set-count current)) (set-count updated)))
         ;(printf "update ~a -> ~a\n" (set-count current) (set-count updated))
         (set! S (set)) 
         )))
@@ -566,10 +566,10 @@
 
 ;;; TESTS
 
-(type-eval
- (compile
-  (file->value "test/boyer.scm")
-))
+;(type-eval
+; (compile
+;  (file->value "test/boyer.scm")
+;))
 
 
 (define (benchmark names)
@@ -585,30 +585,30 @@
                      ((lattice-⊔ type-lattice) d (ko-d s)))))
       (printf "~a ~a ~a ~a\n" (~a name #:min-width 12) (~a state-count #:min-width 12) (~a (system-duration sys) #:min-width 12) (~a (set-count ((lattice-γ type-lattice) d-result)) #:min-width 4)))))
 
-;(benchmark (list ;"takr" "7.14" "triangl" "5.14.3"; unverified
-;            "fib" ;  warmup
-;            "collatz" ; warmup
-;            "5.14.3"
-;            "7.14"
-;            "browse"
-;            "churchnums"
-;            "dderiv"
-;            "deriv"
-;            "destruct"
-;            "fannkuch"
-;            "graphs"
-;            "grid"
-;            ;"matrix" no results in machine
-;            "mazefun"
-;            "mceval"
-;            "partialsums"
-;            "primtest"
-;            "regex"
-;            "scm2java"
-;            "spectralnorm"
-;            "treeadd"
-;            "triangl"
-;            "boyer"
-;            ))
+(benchmark (list ;"takr" "7.14" "triangl" "5.14.3"; unverified
+            "fib" ;  warmup
+            "collatz" ; warmup
+            "5.14.3"
+            "7.14"
+            "browse"
+            "churchnums"
+            "dderiv"
+            "deriv"
+            "destruct"
+            "fannkuch"
+            "graphs"
+            "grid"
+            ;"matrix" no results in machine
+            "mazefun"
+            "mceval"
+            "partialsums"
+            "primtest"
+            "regex"
+            "scm2java"
+            "spectralnorm"
+            "treeadd"
+            "triangl"
+            "boyer"
+            ))
 
 
