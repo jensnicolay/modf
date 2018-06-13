@@ -29,7 +29,7 @@
 ;(struct ctx (e ρ) #:transparent)
 (struct ev (e ρ ι κ) #:transparent)
 (struct ko (d ι κ) #:transparent)
-(struct system (initial graph duration) #:transparent)
+(struct system (initial graph σ duration) #:transparent)
 
 
 (define count!
@@ -107,13 +107,13 @@
     (set! R (hash-set R a (set-add (hash-ref R a (set)) κ)))
     (hash-ref σ a))
 
-  ;(define store-size 0)
-  ;(define prev-store-size 0)
-  ;(define (set-store-size! new)
-  ;  (unless (= new prev-store-size)
-  ;    (set! prev-store-size store-size)
-  ;    (set! store-size new)
-   ;   (printf "store-size ~v\n" new)))
+;  (define store-size 0)
+;  (define prev-store-size 0)
+;  (define (set-store-size! new)
+;    (unless (= new prev-store-size)
+;      (set! prev-store-size store-size)
+;      (set! store-size new)
+;      (printf "store-size ~v\n" new)))
 
   (define (store-alloc! a d)
     (if (hash-has-key? σ a) 
@@ -519,7 +519,7 @@
       (let ((t-end (current-milliseconds)))
         (let ((duration (- t-end t-start)))
           ;(printf "exploration ~v ms\n" duration)
-          (system s0 g duration))))))
+          (system s0 g σ duration))))))
 
 (define (result-state? s κ0)
   (match s
@@ -542,6 +542,11 @@
 ;                    (loop S* (set-union (set-rest W) S-succ) (set-add S-res s))
 ;                    (loop S* (set-union (set-rest W) S-succ) S-res))))))))
 
+(define (filter-contexts σ)
+  (for/hash (((a d) (in-hash σ)) #:unless (and (pair? a) (struct? (car a))))
+    ;(when (and (pair? a) (struct? (car a)))
+    ;  (printf "filter ~a\n" a))
+    (values a d)))
 
 (define (evaluate e lat alloc kalloc)
   (let* ((sys (explore e lat alloc kalloc))
@@ -549,7 +554,7 @@
          (s0 (system-initial sys))
          (κ0 (ev-κ s0))
          (states (apply set-union (cons (list->set (hash-keys g)) (hash-values g)))))
-    (printf "~v states in ~v ms (~a)\n" (set-count states) (system-duration sys) (state-repr s0))
+    (printf "~v states in ~v ms\n" (set-count states) (system-duration sys))
     (generate-dot s0 g "grapho")
     (for/fold ((d (lattice-⊥ lat))) ((s (in-set states)) #:when (result-state? s κ0))
       ((lattice-⊔ lat) d (ko-d s)))))
@@ -603,7 +608,7 @@
 ;(type-eval
 ; (compile
 ;
-;  (file->value "test/boyer.scm")
+;  (file->value "test/fib.scm")
 ;
 ;  )) 
 
@@ -618,9 +623,15 @@
            (κ0 (ev-κ s0))
            (states (apply set-union (cons (list->set (hash-keys g)) (hash-values g))))
            (state-count (set-count states))
+           (σ (filter-contexts (system-σ sys)))
+           (store-key-size (hash-count σ))
+           (store-value-size (for/sum ((d (in-set (hash-values σ))))
+                               (set-count d)))
            (d-result (for/fold ((d (lattice-⊥ type-lattice))) ((s (in-set states)) #:when (result-state? s κ0))
                        ((lattice-⊔ type-lattice) d (ko-d s)))))
-      (printf "~a ~a ~a ~a\n" (~a name #:min-width 12) (~a state-count #:min-width 12) (~a (system-duration sys) #:min-width 12) (~a (set-count ((lattice-γ type-lattice) d-result)) #:min-width 4)))))
+      (printf "~a ~a ~a output ~a keys ~a values ~a\n" (~a name #:min-width 12) (~a state-count #:min-width 12)
+              (~a (system-duration sys) #:min-width 12) (~a (set-count ((lattice-γ type-lattice) d-result)) #:min-width 4)
+              (~a store-key-size #:min-width 8) store-value-size))))
 
 (benchmark (list ;"takr" "7.14" "triangl" "5.14.3"; unverified
             "fib" ; warmup

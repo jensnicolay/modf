@@ -27,7 +27,7 @@
 (struct stack (ι κ) #:transparent)
 (struct ev (e ρ ι κ) #:transparent)
 (struct ko (d ι κ) #:transparent)
-(struct system (initial graph duration) #:transparent)
+(struct system (initial graph σ duration) #:transparent)
 
 
 (define count!
@@ -474,7 +474,7 @@
       (let ((t-end (current-milliseconds)))
         (let ((duration (- t-end t-start)))
           ;(printf "exploration ~v ms\n" duration)
-          (system s0 g duration))))))
+          (system s0 g σ duration))))))
 
 (define (result-state? s)
   (match s
@@ -505,7 +505,7 @@
          (state-count (set-count states))
          (d-result (for/fold ((d (lattice-⊥ lat))) ((s (in-set states)) #:when (result-state? s))
                      ((lattice-⊔ lat) d (ko-d s)))))
-    (printf "~v states in ~v ms\n" state-count (system-duration sys))
+    (printf "~a states in ~v ms\n" state-count (system-duration sys))
     (if (> state-count 10000)
         (printf "too many states: no graph generated\n")
         (generate-dot s0 g "grapho" (set-count states)))
@@ -568,12 +568,12 @@
 
 ;(type-eval
 ; (compile
-;  (file->value "test/boyer.scm")
+;  (file->value "test/fib.scm")
 ;))
 
 
 (define (benchmark names)
-  (printf "aac\n")
+  (printf "aam\n")
   (for ((name (in-list names)))
     (let* ((e (compile (file->value (string-append "test/" name ".scm"))))
            (sys (explore e type-lattice type-alloc modf-kalloc))
@@ -581,9 +581,15 @@
            (s0 (system-initial sys))
            (states (apply set-union (cons (list->set (hash-keys g)) (hash-values g))))
            (state-count (set-count states))
+           (σ (system-σ sys))
+           (store-key-size (hash-count σ))
+           (store-value-size (for/sum ((d (in-set (hash-values σ))))
+                         (set-count d)))
            (d-result (for/fold ((d (lattice-⊥ type-lattice))) ((s (in-set states)) #:when (result-state? s))
                      ((lattice-⊔ type-lattice) d (ko-d s)))))
-      (printf "~a ~a ~a ~a\n" (~a name #:min-width 12) (~a state-count #:min-width 12) (~a (system-duration sys) #:min-width 12) (~a (set-count ((lattice-γ type-lattice) d-result)) #:min-width 4)))))
+      (printf "~a ~a ~a output ~a keys ~a values ~a\n" (~a name #:min-width 12) (~a state-count #:min-width 12)
+              (~a (system-duration sys) #:min-width 12) (~a (set-count ((lattice-γ type-lattice) d-result)) #:min-width 4)
+              (~a store-key-size #:min-width 8) store-value-size))))
 
 (benchmark (list ;"takr" "7.14" "triangl" "5.14.3"; unverified
             "fib" ;  warmup
