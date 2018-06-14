@@ -4,49 +4,15 @@
 (require "ast.rkt")
 (require "lattice.rkt")
 
-(random-seed 111)
+(provide explore)
 
-(provide conc-eval)
+(random-seed 111)
 
 (define ns (make-base-namespace))
 
 ;;;;;;;;;;
 
-(struct letk (x e ρ) #:transparent)
-(struct letreck (x e ρ) #:transparent)
-(struct clo (e ρ) #:transparent
-  #:property prop:custom-write (lambda (v p w?)
-                                 (fprintf p "<clo ~v>" (clo-e v))))
-(struct prim (name proc) #:methods gen:equal+hash ((define equal-proc (lambda (s1 s2 requal?)
-                                                                        (equal? (prim-name s1) (prim-name s2))))
-                                                   (define hash-proc (lambda (s rhash) (equal-hash-code (prim-name s))))
-                                                   (define hash2-proc (lambda (s rhash) (equal-secondary-hash-code (prim-name s))))))
-(struct compiled (name proc) #:methods gen:equal+hash ((define equal-proc (lambda (s1 s2 requal?)
-                                                                        (equal? (compiled-name s1) (compiled-name s2))))
-                                                   (define hash-proc (lambda (s rhash) (equal-hash-code (compiled-name s))))
-                                                   (define hash2-proc (lambda (s rhash) (equal-secondary-hash-code (compiled-name s))))))
-(struct addr (a) #:transparent)
-;(struct ctx (e ρ) #:transparent)
-(struct ev (e ρ ι κ) #:transparent)
-(struct ko (d ι κ) #:transparent)
-(struct system (initial graph σ duration) #:transparent)
 
-
-(define count!
-  (let ((counter 0))
-    (lambda ()
-      (begin0
-        counter
-        (set! counter (add1 counter))))))
-
-(define (index v x)
-  (let ((i (vector-member x v)))
-    (if i
-        i
-        (let ((i (add1 (vector-ref v 0))))
-          (vector-set! v 0 i)
-          (vector-set! v i x)
-          i))))
 (define stateis (make-vector 8000))
 (define (state->statei q) (index stateis q))
 (define ctxis (make-vector 2000))
@@ -332,8 +298,8 @@
           (set d))))
 
     (define-native-prim! "make-vector"
-      (lambda (_ κ d-rands)
-        (let* ((a (alloc e κ))
+      (lambda (e-app κ d-rands)
+        (let* ((a (alloc e-app κ))
                (num (car d-rands))
                ;(global (lattice-global lattice))
                (lt-proc (lambda (x y)
@@ -352,8 +318,8 @@
                   (set (α (addr a)))))))))
 
     (define-native-prim! "vector"
-      (lambda (_ κ d-rands)
-        (let* ((a (alloc e 'TODO))
+      (lambda (e-app κ d-rands)
+        (let* ((a (alloc e-app 'TODO))
                (num (length d-rands))
                (h (hash)))
           (let loop ((h h) (d-rands d-rands) (i 0))
@@ -521,12 +487,6 @@
           ;(printf "exploration ~v ms\n" duration)
           (system s0 g σ duration))))))
 
-(define (result-state? s κ0)
-  (match s
-    ((ko d '() (== κ0))     
-     #t)
-    (_
-     #f)))
     
 ;(define (result-states g s0)
 ;  (let loop ((S (set)) (W (set s0)) (S-res (set)))
@@ -542,120 +502,15 @@
 ;                    (loop S* (set-union (set-rest W) S-succ) (set-add S-res s))
 ;                    (loop S* (set-union (set-rest W) S-succ) S-res))))))))
 
-(define (filter-contexts σ)
-  (for/hash (((a d) (in-hash σ)) #:unless (and (pair? a) (struct? (car a))))
-    ;(when (and (pair? a) (struct? (car a)))
-    ;  (printf "filter ~a\n" a))
-    (values a d)))
 
-(define (evaluate e lat alloc kalloc)
-  (let* ((sys (explore e lat alloc kalloc))
-         (g (system-graph sys))
-         (s0 (system-initial sys))
-         (κ0 (ev-κ s0))
-         (states (apply set-union (cons (list->set (hash-keys g)) (hash-values g)))))
-    (printf "~v states in ~v ms\n" (set-count states) (system-duration sys))
-    (generate-dot s0 g "grapho")
-    (for/fold ((d (lattice-⊥ lat))) ((s (in-set states)) #:when (result-state? s κ0))
-      ((lattice-⊔ lat) d (ko-d s)))))
-    
-(define (conc-alloc e κ)
-  (count!))
-
-(define (conc-kalloc rator rands)
-  (cons rator (count!)))
-                     
-(define (conc-eval e)
-  (evaluate e conc-lattice conc-alloc conc-kalloc))
-
-(define (type-alloc e κ)
-  e)
-
-(define (type-kalloc rator rands)
-  (cons rator rands))
-
-(define (modf-kalloc rator rands ρ*)
-  (cons («lam»-e0 (clo-e rator)) ρ*))
-
-(define (type-eval e)
-  (evaluate e type-lattice type-alloc modf-kalloc)) ; !!! MODF
-
-(define (state-repr s)
-  (match s
-    ((ev e _ _ κ) (format "(ev ~a ~v)" (~a e #:max-width 40) (ctx->ctxi κ)))
-    ((ko d _ κ) (format "(ko ~a ~v)" (~a d #:max-width 40) (ctx->ctxi κ)))))
-
-(define (generate-dot s0 g name)
-  ;    (match from ; TODO investigate non-result end states
-;      ((ev e _ ι κ)
-;       'ok)
-;      ((ko d ι κ)
-;       (printf "??? ~a\n~a\n\n" ι κ)))
-  (let ((dotf (open-output-file (format "~a.dot" name) #:exists 'replace)))
-    (fprintf dotf "digraph G {\n")
-    (for (((s S-succ) (in-hash g)))
-      (let ((si (state->statei s)))
-        ;(printf "output ~a\n" si)
-        (fprintf dotf "~a [label=\"~a | ~a\"];\n" si si (state-repr s))
-        (for ((s* S-succ))
-          (let ((si* (state->statei s*)))
-            (fprintf dotf "~a -> ~a;\n" si si*)))))
-    (fprintf dotf "}")
-    (close-output-port dotf)))
-  
-;;; TESTS
-
-;(type-eval
-; (compile
-;
-;  (file->value "test/fib.scm")
-;
-;  )) 
-
-
-(define (benchmark names)
-  (printf "modf\n")
-  (for ((name (in-list names)))
-    (let* ((e (compile (file->value (string-append "test/" name ".scm"))))
-           (sys (explore e type-lattice type-alloc modf-kalloc))
-           (g (system-graph sys))
-           (s0 (system-initial sys))
-           (κ0 (ev-κ s0))
-           (states (apply set-union (cons (list->set (hash-keys g)) (hash-values g))))
-           (state-count (set-count states))
-           (σ (filter-contexts (system-σ sys)))
-           (store-key-size (hash-count σ))
-           (store-value-size (for/sum ((d (in-set (hash-values σ))))
-                               (set-count d)))
-           (d-result (for/fold ((d (lattice-⊥ type-lattice))) ((s (in-set states)) #:when (result-state? s κ0))
-                       ((lattice-⊔ type-lattice) d (ko-d s)))))
-      (printf "~a ~a ~a output ~a keys ~a values ~a\n" (~a name #:min-width 12) (~a state-count #:min-width 12)
-              (~a (system-duration sys) #:min-width 12) (~a (set-count ((lattice-γ type-lattice) d-result)) #:min-width 4)
-              (~a store-key-size #:min-width 8) store-value-size))))
-
-(benchmark (list ;"takr" "7.14" "triangl" "5.14.3"; unverified
-            "fib" ; warmup
-            "collatz" ; warmup
-            "5.14.3"
-            "7.14"
-            "browse"
-            "churchnums"
-            "dderiv"
-            "deriv"
-            "destruct"
-            "fannkuch"
-            "graphs"
-            "grid"
-            ;"matrix" no results in machine
-            "mazefun"
-            "mceval"
-            "partialsums"
-            "primtest"
-            "regex"
-            "scm2java"
-            "spectralnorm"
-            "treeadd"
-            "triangl"
-            "boyer"
-            ))
-
+;(define (evaluate e lat alloc kalloc)
+;  (let* ((sys (explore e lat alloc kalloc))
+;         (g (system-graph sys))
+;         (s0 (system-initial sys))
+;         (κ0 (ev-κ s0))
+;         (states (apply set-union (cons (list->set (hash-keys g)) (hash-values g)))))
+;    (printf "~v states in ~v ms\n" (set-count states) (system-duration sys))
+;    (generate-dot s0 g "grapho")
+;    (for/fold ((d (lattice-⊥ lat))) ((s (in-set states)) #:when (result-state? s κ0))
+;      ((lattice-⊔ lat) d (ko-d s)))))
+;   

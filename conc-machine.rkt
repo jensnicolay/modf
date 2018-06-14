@@ -21,8 +21,6 @@
 (define (successors s g)
   (hash-ref g s (set)))
 
-;(printf "NO clear of visited for new address\n")
-
 (define (explore e lat alloc kalloc)
     
   (define α (lattice-α lat))
@@ -34,9 +32,8 @@
   (define false? (lattice-false? lat))
   (define α-eq? (lattice-eq? lat))
 
-  (define S (set))
   (define σ (hash))
-  ;(define C (hash))
+  (define σ-shadow (hash))
   (define Ξ (hash))
 
   (define Compiled (set))
@@ -52,62 +49,52 @@
   ;    (set! store-size new)
   ;    (printf "store-size ~v\n" new)))
 
+  (define type-α (lattice-α type-lattice))
+  (define type-⊔ (lattice-⊔ type-lattice))
+  (define type-⊥ (lattice-⊥ type-lattice))
+
+  ;(define CONS "CONS")
+  
+  (define (abst x)
+    (match x
+      ((clo lam ρ)
+       (type-α (clo lam (for/hash (((k v) (in-hash ρ)))
+                          (values k (if (pair? v) (cdr v) v))))))
+      ((cons y z)
+       (type-α (cons (abst y) (abst z))))
+      ((addr y)
+       (type-α (addr (cdr y))))
+      (_ (type-α x))))
+
   (define (store-alloc! a d)
-    (if (hash-has-key? σ a) 
-        (let* ((current (hash-ref σ a))
-               (updated (⊔ current d)))
-          ;(set! C (hash-set C a (add1 (hash-ref C a))))
-          (unless (equal? current updated)
-            (set! σ (hash-set σ a updated))
-   ;         (set-store-size! (+ (- store-size (set-count current)) (set-count updated)))
-            ;(printf "alloc ~a -> ~a\n" (set-count current) (set-count updated))
-            (set! S (set))         
-            ))
+    (if (hash-has-key? σ a)
+        (error "merging!")
         (begin
-          ;(set! C (hash-set C a 1))
           (set! σ (hash-set σ a d))
-    ;      (set-store-size! (+ store-size (set-count d)))
-          ;(printf "address ~a\n" (set-count (hash-keys σ)))
-          (set! S (set))
-          )
-        ))
+          (shadow-store-alloc! (if (pair? a) (cdr a) a) (abst d)))))
           
   (define (store-update! a d)
-    (let* ((current (hash-ref σ a))
-           ;(c (hash-ref C a))
-           (updated (if #f;(= c 1)
-                        d
-                        (⊔ current d))))
-      (unless (equal? current updated)
-        (set! σ (hash-set σ a updated))
-     ;   (set-store-size! (+ (- store-size (set-count current)) (set-count updated)))
-        ;(printf "update ~a -> ~a\n" (set-count current) (set-count updated))
-        (set! S (set)) 
-        )))
+    (set! σ (hash-set σ a d))
+    (shadow-store-update! (if (pair? a) (cdr a) a) (abst d)))
 
-  (define (stack-alloc! κ stack)
-    ;(printf "allocing ctx ~a stack ~a " (ctx->ctxi τ) (stack-to-string stack))
-    (let ((stacks (hash-ref Ξ κ #f)))
-      (if stacks
-          (unless (set-member? stacks stack)
-            ;(printf "ADDING to ~a\n" (set-map stacks stack-to-string))
-            (set! Ξ (hash-set Ξ κ (set-add stacks stack)))
-            ;(for ((s (hash-ref pops κ (set))))
-            ;  (match s
-            ;    ((ko v _ _ _)
-            ;     (let ((s* (ko v (state-store) (car stack) (cdr stack))))
-            ;       (hash-set! graph s (set-add (hash-ref graph s (set)) (transition s* (set))))
-            ;(printf "adding ~a -> ~a\n" (state->statei s) (state->statei s*))
-            ;       (set-remove! visited s*)
-            ;       (set! todo (set-add todo s*))))))
-            ;(set! stack-stores (cons Ξ stack-stores))
-            (set! S (set))
-            )
-          (begin 
-            (set! Ξ (hash-set Ξ κ (set stack)))
-            ;(set! stack-stores (cons Ξ stack-stores))
-            (set! S (set))
-            ))))
+  (define (shadow-store-alloc! a d)
+    ;(printf "shadow all ~a ~a\n" a d)
+    (let* ((current (hash-ref σ-shadow a type-⊥))
+           (updated (type-⊔ current d)))
+      ;(when (and (not (eq? current type-⊥)) (not (equal? current updated)))
+      ;  (printf "alloc update! ~a\n" updated))
+      (set! σ-shadow (hash-set σ-shadow a updated))))
+          
+  (define (shadow-store-update! a d)
+    ;(printf "shadow upd ~a ~a\n" a d)
+    (let* ((current (hash-ref σ-shadow a))
+           ;(c (hash-ref C a))
+           (updated (type-⊔ current d)))
+      ;(when (and (not (eq? current type-⊥)) (not (equal? current updated)))
+      ;  (printf "alloc update! ~a\n" updated))
+      (set! σ-shadow (hash-set σ-shadow a updated))))
+
+
   
 
   (define (alloc-literal! e)
@@ -158,8 +145,7 @@
                 (let bind-loop ((xs xs) (ρ* ρ**) (d-rands d-rands))
                   (if (null? xs)
                       (let ((κ* (kalloc rator d-rands ρ*)))
-                        ;(set! Ξ (hash-set Ξ κ* (set-add (hash-ref Ξ κ* (set)) (stack ι κ))))
-                        (stack-alloc! κ* (stack ι κ))
+                        (set! Ξ (hash-set Ξ κ* (set-add (hash-ref Ξ κ* (set)) (stack ι κ))))
                         (set-union S (set (ev e-body ρ* '() κ*))))
                       (if (null? d-rands)
                           S
@@ -400,7 +386,7 @@
     
     (define-native-prim! "display"
       (lambda (_ __ d-rands)
-        (printf "~v\n" d-rands)
+        (display (car d-rands))
         (set (α 'undefined))))
 
     (include "primitives.rkt")
@@ -425,15 +411,13 @@
   (define (explore! W)
     (unless (set-empty? W)
       (let ((s (set-first W)))
-        (if (set-member? S s)
-            (explore! (set-rest W))
-            (let* ((succs (step s))
-                   (W* (set-union (set-rest W) succs))
-                   (S* (set-add S s)))
+        (let* ((succs (step s))
+               (W* (set-union (set-rest W) succs)))
               ;(printf "TRANS ~v -> ~v\n" (state->statei s) (set-map succs state->statei)))
-              (add-transitions! s succs)
-              (set! S S*)
-              (explore! W*))))))
+          (when (> (set-count succs) 1)
+            (error "more than 1 succ"))
+          (add-transitions! s succs)
+          (explore! W*)))))
 
 ;  (define (prune s0 g pred?)
 ;
@@ -468,7 +452,65 @@
       (let ((t-end (current-milliseconds)))
         (let ((duration (- t-end t-start)))
           ;(printf "exploration ~v ms\n" duration)
-          (system s0 g σ duration))))))
+          (system s0 g σ-shadow duration))))))
+
+    
+;(define (result-states g s0)
+;  (let loop ((S (set)) (W (set s0)) (S-res (set)))
+;    (if (set-empty? W)
+;        S-res
+;        (let ((s (set-first W)))
+;          ;(printf "insp ~v ~v\n" (state->statei s) (set-map (hash-ref g s (set)) state->statei))
+;          (if (set-member? S s)
+;              (loop S (set-rest W) S-res)
+;              (let ((S* (set-add S s))
+;                    (S-succ (hash-ref g s (set))))
+;                (if (result-state? s)
+;                    (loop S* (set-union (set-rest W) S-succ) (set-add S-res s))
+;                    (loop S* (set-union (set-rest W) S-succ) S-res))))))))
+
+ 
+    
+
+;(define (generate-dot s0 g name size)
+;  (define stateis (make-vector (add1 size)))
+;  (define (state->statei q) (index stateis q))
+;  (define ctxis (make-vector 2000))
+;  (define (ctx->ctxi q) (index ctxis q))
+;
+;  (define (state-repr s)
+;    (match s
+;      ((ev e _ _ κ) (format "(ev ~a ~v)" (~a e #:max-width 40) (ctx->ctxi κ)))
+;      ((ko d _ κ) (format "(ko ~a ~v)" (~a d #:max-width 40) (ctx->ctxi κ)))))
+;
+;
+;  (let ((dotf (open-output-file (format "~a.dot" name) #:exists 'replace)))
+;    (fprintf dotf "digraph G {\n")
+;    (let loop ((S (set)) (W (set s0)))
+;      (if (set-empty? W)
+;          (begin
+;            (fprintf dotf "}")
+;            (close-output-port dotf))
+;          (let ((s (set-first W)))
+;            (if (set-member? S s)
+;                (loop S (set-rest W))
+;                (let ((S* (set-add S s))
+;                      (S-succ (hash-ref g s (set)))
+;                      (si (state->statei s)))
+;                  (fprintf dotf "~a [label=\"~a | ~a\"];\n" si si (state-repr s))
+;                  (for ((s* S-succ))
+;                    (let ((si* (state->statei s*)))
+;                      (fprintf dotf "~a -> ~a;\n" si si*)))
+;                  (loop S* (set-union (set-rest W) S-succ)))))))))
+
+;;; TESTS
+
+;(module+ main
+;    (type-eval
+;     (compile
+;      (file->value "test/fib.scm")
+;      ))
+;  )
 
 
 
