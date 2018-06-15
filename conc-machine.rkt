@@ -53,7 +53,7 @@
   (define type-⊔ (lattice-⊔ type-lattice))
   (define type-⊥ (lattice-⊥ type-lattice))
 
-  ;(define CONS "CONS")
+  (define CONS "CONS")
   
   (define (abst x)
     (match x
@@ -61,7 +61,7 @@
        (type-α (clo lam (for/hash (((k v) (in-hash ρ)))
                           (values k (if (pair? v) (cdr v) v))))))
       ((cons y z)
-       (type-α (cons (abst y) (abst z))))
+       (set CONS))
       ((addr y)
        (type-α (addr (cdr y))))
       (_ (type-α x))))

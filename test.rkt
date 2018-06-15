@@ -81,18 +81,18 @@
   (for ((name (in-list names)))
     (printf "~a\n" name)
     (let* ((e (compile (file->value (string-append "test/" name ".scm"))))
-           (conc (perform-benchmark e name "conc" conc:explore conc-lattice conc-alloc conc-kalloc))
+           ;(conc (perform-benchmark e name "conc" conc:explore conc-lattice conc-alloc conc-kalloc))
            (aam (perform-benchmark e name "aam" aam:explore type-lattice type-alloc modf-kalloc))
            (modf (perform-benchmark e name "modf" modf:explore type-lattice type-alloc modf-kalloc)))
 
-      (printf "subsumption d-result\n")
-      (let ((d-result-conc (abst (hash-ref conc 'd-result)))
-            (d-result-aam (hash-ref aam 'd-result))
-            (d-result-modf (hash-ref modf 'd-result)))
-        (unless (⊑ d-result-conc d-result-aam)
-          (printf "aam does not subsume conc: conc ~a aam ~a\n" d-result-conc d-result-aam))
-        (unless (⊑ d-result-conc d-result-modf)
-          (printf "modf does not subsume conc: conc ~a modf ~a\n" d-result-conc d-result-modf)))
+;      (printf "subsumption d-result\n")
+;      (let ((d-result-conc (abst (hash-ref conc 'd-result)))
+;            (d-result-aam (hash-ref aam 'd-result))
+;            (d-result-modf (hash-ref modf 'd-result)))
+;        (unless (⊑ d-result-conc d-result-aam)
+;          (printf "aam does not subsume conc: conc ~a aam ~a\n" d-result-conc d-result-aam))
+;        (unless (⊑ d-result-conc d-result-modf)
+;          (printf "modf does not subsume conc: conc ~a modf ~a\n" d-result-conc d-result-modf)))
 
 ;      (printf "subsumption σ\n")
 ;      (let ((σ-conc (hash-ref conc 'σ))
@@ -123,18 +123,22 @@
          (store-key-size (hash-count σ))
          (store-value-size (for/sum ((d (in-set (hash-values σ))))
                              (set-count (γ d))))
+         (store-mono-size (for/sum (((a d) (in-hash σ)))
+                             (if (and (struct? a) (= 1 (set-count (γ d))))
+                                 1
+                                 0)))
          (d-result (for/fold ((d ⊥)) ((s (in-set states)) #:when (result-state? s κ0))
                      (⊔ d (ko-d s)))))
-    (printf "~a ~a ~a output ~a keys ~a values ~a\n" (~a machine-name #:min-width 8) (~a state-count #:min-width 12)
+    (printf "~a ~a ~a output ~a keys ~a values ~a mono ~a\n" (~a machine-name #:min-width 8) (~a state-count #:min-width 12)
             (~a (system-duration sys) #:min-width 12) (~a (set-count (γ d-result)) #:min-width 4)
-            (~a store-key-size #:min-width 8) store-value-size)
+            (~a store-key-size #:min-width 6) (~a store-value-size #:min-width 8) (~a store-mono-size #:min-width 6))
     (hash 'σ σ 'd-result d-result)))
 
 (benchmark (list
             "fib" ;  warmup
             "collatz" ; warmup
-           "5.14.3"
-            "7.14"
+            "supermerge"
+            "classtree"
             "browse"
             "churchnums"
             "dderiv"
@@ -142,8 +146,8 @@
             "destruct"
             "fannkuch"
             "graphs"
-            "grid"
-            ;"matrix" no results in machine
+            ;"grid"
+            "matrix"
             "mazefun"
             "mceval"
             "partialsums"

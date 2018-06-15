@@ -6,3 +6,4 @@
 *.dot
 *.rkt~
 test/.DS_Store
+*.rkt#1#
