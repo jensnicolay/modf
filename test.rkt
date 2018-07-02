@@ -63,6 +63,34 @@
       (type-α (addr (cdr (addr-a x))))
       (type-α x)))
 
+(define (print-benchmark-row name results)
+  (define node-count (hash-ref results 'node-count))
+  (define lam-count (hash-ref results 'lam-count))
+  (define set!-count (hash-ref results 'set!-count))
+  (define set-car!-count (hash-ref results 'set-car!-count))
+  (define set-cdr!-count (hash-ref results 'set-cdr!-count))
+  (define vector-set!-count (hash-ref results 'vector-set!-count))
+  (define cons-count (hash-ref results 'cons-count))
+  (define make-vector-count (hash-ref results 'make-vector-count))
+  (printf "\\code{~a} & ~a & ~a & ~a & ~a & ~a & ~a & ~a & ~a\\\\\n"
+          (~a name #:min-width 14)
+          (~a node-count #:min-width 6)
+          (~a lam-count #:min-width 3)
+          (~a set!-count #:min-width 3)
+          (~a cons-count #:min-width 3)
+          (~a set-car!-count #:min-width 3)
+          (~a set-cdr!-count #:min-width 3)
+          (~a make-vector-count #:min-width 3)
+          (~a vector-set!-count #:min-width 3)
+          ))
+
+(define (print-benchmarks)
+  (printf "benchmarks\n")
+  (for ((r test-result))
+       (let* ((benchmark-name (car r))
+              (results (cadr r)))
+         (print-benchmark-row benchmark-name results))))
+
 ;(define (store-⊑ σ1 σ2)
 ;  (if (equal? σ1 σ2)
 ;      #t
@@ -137,13 +165,12 @@
 (benchmark (list
             "fib" ;  warmup
             "collatz" ; warmup
-            "supermerge"
-            "classtree"
             "browse"
             "churchnums"
+            "classtree"
             "dderiv"
             "deriv"
-            "destruct"
+            "destruc"
             "fannkuch"
             "graphs"
             ;"grid"
@@ -155,6 +182,7 @@
             "regex"
             "scm2java"
             "spectralnorm"
+            "supermerge"
             "treeadd"
             "triangl"
             "boyer"
