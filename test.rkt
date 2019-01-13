@@ -4,8 +4,8 @@
 (require "ast.rkt")
 (require "lattice.rkt")
 (require (prefix-in conc: "conc-machine.rkt"))
-(require (prefix-in aam: "machine.rkt"))
-(require (prefix-in modf: "modf-qj.rkt"))
+(require (prefix-in aam: "aac.rkt"))
+(require (prefix-in modf: "modf.rkt"))
 
 (define count!
   (let ((counter -1))
@@ -84,12 +84,12 @@
           (~a vector-set!-count #:min-width 3)
           ))
 
-(define (print-benchmarks)
-  (printf "benchmarks\n")
-  (for ((r test-result))
-       (let* ((benchmark-name (car r))
-              (results (cadr r)))
-         (print-benchmark-row benchmark-name results))))
+; (define (print-benchmarks)
+;   (printf "benchmarks\n")
+;   (for ((r test-result))
+;        (let* ((benchmark-name (car r))
+;               (results (cadr r)))
+;          (print-benchmark-row benchmark-name results))))
 
 ;(define (store-⊑ σ1 σ2)
 ;  (if (equal? σ1 σ2)
